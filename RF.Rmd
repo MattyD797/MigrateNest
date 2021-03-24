@@ -36,7 +36,7 @@ colnames(beh)[7]<-"ID"
 #Find birds that have field notes
 beh.un <- as.character(unique(beh[,7]))
 beh.un <- beh.un[order(beh.un)]
-beh.un <- paste0("../RF/", beh.un, ".csv")
+beh.un <- paste0("cleaned_tracks/", beh.un, "_clean.csv")
 hdata <- data.frame()
 for (birds in beh.un){
   x <- read.csv(birds, skip=4, colClasses = "character")
