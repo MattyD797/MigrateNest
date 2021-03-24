@@ -1,0 +1,165 @@
+---
+title: "Untitled"
+author: "Matt Duggan"
+date: "3/22/2021"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, root.dir = "..")
+library(m2b)
+library(dplyr)
+library(leaflet)
+library(raster)
+library(shiny)
+library(shinydashboard)
+library(tidyr)
+library(lubridate)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r Find Id and colorcode}
+
+beh <- read.csv("../CSV/GPS Data/UvA_brood_monitor_hist.csv", header = T)
+colour <- read.csv("../CSV/GPS Data/UvA_Transmitter_info.csv", header = T) 
+
+#Match color code with ID
+beh[,7] <- colour[match(beh[,1], colour[,1]), 4]
+colnames(beh)[7]<-"ID"
+
+#Find birds that have field notes
+beh.un <- as.character(unique(beh[,7]))
+beh.un <- beh.un[order(beh.un)]
+beh.un <- paste0("../RF/", beh.un, ".csv")
+hdata <- data.frame()
+for (birds in beh.un){
+  x <- read.csv(birds, skip=4, colClasses = "character")
+  hdata <- bind_rows(hdata, x)
+}
+
+hdata[,ncol(hdata)+1] <- substring(hdata[,2],1,4)
+colnames(hdata)[ncol(hdata)]<-"Year"
+```
+
+```{r nest data reformating}
+
+nest <- read.csv("../CSV/GPS Data/UvA_nest_locs.csv", header = T)
+nest <- nest[,-4]
+
+#convert UTM to latlon coordinates 
+coordinates(nest) <- c("Easting", "Northing")
+proj4string(nest) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat_nest <- spTransform(nest, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs_nest <- data.frame(as(longlat_nest, "SpatialPoints"))
+
+nest <- data.frame(nest)[,-4]
+nest[,c(2,3)]<-longlat_locs_nest
+colnames(nest)[c(2,3)] <- c("lng", "lat") 
+
+nest[,4] <- colour[match(nest[,1], colour[,7]), 4]
+nest[,5] <- colour[match(nest[,1], colour[,7]), 5]
+nest[,4] <- as.character(nest[,4])
+nest[,5] <- as.character(nest[,5])
+nest[,4] <- paste0(nest[,4], "-", nest[,5])
+nest_id <- nest[, c(4,2,3)]
+colnames(nest_id)[1] <- "ID" 
+```
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r test data reformatting}
+test <- read.csv("../cleaned_tracks/1008_clean.csv")
+test.data <- test[,c(2,3,5)]
+test.data[,4] <- rep("1008", nrow(test.data))
+colnames(test.data)[4] <- "ID" 
+test.data <- test.data[,c(4,1:3)]
+
+#creates Id as ID-Year
+test.data[,ncol(test.data)+1] <- substring(test.data[,4],1,4)
+colnames(test.data)[ncol(test.data)]<-"Year"
+test.data[,1] <- paste0(test.data[,1], "-", test.data[,5])
+test.data <- test.data[,-ncol(test.data)]
+
+#convert UTM to latlon coordinates 
+coordinates(test.data) <- c("x", "y")
+proj4string(test.data) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat <- spTransform(test.data, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs <- data.frame(as(longlat, "SpatialPoints"))
+colnames(longlat_locs) <- c("lng", "lat")
+test.data <- data.frame(test.data)[,-5]
+test.data[,c(2,3)] <- longlat_locs
+colnames(test.data)[c(2,3)] <- c("lng", "lat")
+nest_loc<-data.frame()
+#find nest site
+nest_loc<- nest_id[match(test.data[,1], nest_id[,1]), c(2,3)][1,]
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r shiny}
+
+test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S")
+nestIcon <- makeIcon(iconUrl = "../Images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 15, iconAnchorY = 15)
+ui <- dashboardPage(
+    dashboardHeader(title = "Black-Tailed Godwit 1008"),
+    dashboardSidebar(collapsed = T),
+    dashboardBody(
+        #The leaflet map
+        fluidRow(
+            box(leafletOutput("mymap")),
+            
+            box(
+                title = "Control",
+                sliderInput("date_range", 
+                            "Choose Date Range:", 
+                            test.data[1,4], 
+                            test.data[nrow(test.data),4], 
+                            value = as.POSIXct("2013-05-25 05:00:00"), 
+                            timezone = "-0400", 
+                            animate = T, 
+                            ticks = T,
+                            timeFormat = "%Y-%m-%d %H:%M:%S", 
+                            step = 7200), 
+                animationOptions(interval = 10)
+            )
+        )
+    )
+)
+server <- function(input, output) {
+    output$mymap <- renderLeaflet({
+        subsetdata <- test.data[which(test.data$date_time <= input$date_range),]
+        
+        leaflet() %>%
+        addCircleMarkers(lng=subsetdata[c(1:nrow(subsetdata)-1),2], lat=subsetdata[c(1:nrow(subsetdata)-1),3], 
+                          popup=paste ("<b>Date: </b>", subsetdata[,4], "<br>",
+                                       "<b>Index: </b>", c(1:nrow(subsetdata)), "<br>"), 
+                          radius = 10, 
+                          opacity = 0.5, 
+                          color = "green") %>%
+        addProviderTiles(providers$Esri.WorldGrayCanvas) %>% 
+        addMarkers(lng = nest_loc[,1], lat = nest_loc[,2], icon = nestIcon)%>% 
+        addCircleMarkers(lng = as.numeric(test.data[1,2]), 
+                                    lat = as.numeric(test.data[1,3]), color = "darkviolet")%>% 
+        addPolylines(subsetdata$lng,
+                     subsetdata$lat, 
+                     color = "lightgreen") %>%
+        addCircleMarkers(lng = as.numeric(subsetdata[nrow(subsetdata),2]), 
+                         lat = as.numeric(subsetdata[nrow(subsetdata),3]), 
+                         color = "red") 
+    })
+}
+
+x<- shinyApp(ui, server)
+x
+```
