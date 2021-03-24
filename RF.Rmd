@@ -32,19 +32,6 @@ colour <- read.csv("GPS Data/UvA_Transmitter_info.csv", header = T)
 #Match color code with ID
 beh[,7] <- colour[match(beh[,1], colour[,1]), 4]
 colnames(beh)[7]<-"ID"
-
-#Find birds that have field notes
-beh.un <- as.character(unique(beh[,7]))
-beh.un <- beh.un[order(beh.un)]
-beh.un <- paste0("cleaned_tracks/", beh.un, "_clean.csv")
-hdata <- data.frame()
-for (birds in beh.un){
-  x <- read.csv(birds, skip=4, colClasses = "character")
-  hdata <- bind_rows(hdata, x)
-}
-
-hdata[,ncol(hdata)+1] <- substring(hdata[,2],1,4)
-colnames(hdata)[ncol(hdata)]<-"Year"
 ```
 
 ```{r nest data reformating}
