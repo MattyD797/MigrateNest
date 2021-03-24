@@ -26,8 +26,8 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ```{r Find Id and colorcode}
 
-beh <- read.csv("../CSV/GPS Data/UvA_brood_monitor_hist.csv", header = T)
-colour <- read.csv("../CSV/GPS Data/UvA_Transmitter_info.csv", header = T) 
+beh <- read.csv("GPS Data/UvA_brood_monitor_hist.csv", header = T)
+colour <- read.csv("GPS Data/UvA_Transmitter_info.csv", header = T) 
 
 #Match color code with ID
 beh[,7] <- colour[match(beh[,1], colour[,1]), 4]
@@ -49,7 +49,7 @@ colnames(hdata)[ncol(hdata)]<-"Year"
 
 ```{r nest data reformating}
 
-nest <- read.csv("../CSV/GPS Data/UvA_nest_locs.csv", header = T)
+nest <- read.csv("GPS Data/UvA_nest_locs.csv", header = T)
 nest <- nest[,-4]
 
 #convert UTM to latlon coordinates 
@@ -77,7 +77,7 @@ colnames(nest_id)[1] <- "ID"
 You can also embed plots, for example:
 
 ```{r test data reformatting}
-test <- read.csv("../cleaned_tracks/1008_clean.csv")
+test <- read.csv("cleaned_tracks/1008_clean.csv")
 test.data <- test[,c(2,3,5)]
 test.data[,4] <- rep("1008", nrow(test.data))
 colnames(test.data)[4] <- "ID" 
@@ -110,7 +110,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 ```{r shiny}
 
 test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S")
-nestIcon <- makeIcon(iconUrl = "../Images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 15, iconAnchorY = 15)
+nestIcon <- makeIcon(iconUrl = "Images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 15, iconAnchorY = 15)
 ui <- dashboardPage(
     dashboardHeader(title = "Black-Tailed Godwit 1008"),
     dashboardSidebar(collapsed = T),
