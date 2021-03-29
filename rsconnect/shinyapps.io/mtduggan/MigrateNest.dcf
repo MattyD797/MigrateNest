@@ -1,0 +1,12 @@
+name: MigrateNest
+title: MigrateNest
+username:
+account: mtduggan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3877759
+bundleId: 4406485
+url: https://mtduggan.shinyapps.io/MigrateNest/
+when: 1617001790.70246
+asMultiple: FALSE
+asStatic: FALSE

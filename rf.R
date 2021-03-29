@@ -1,0 +1,288 @@
+## ----setup, include=FALSE--------------------------------------------------------------------------------------
+knitr::opts_chunk$set(echo = TRUE, root.dir = "..")
+#library(m2b)
+library(dplyr)
+library(leaflet)
+library(raster)
+library(shiny)
+library(shinydashboard)
+library(tidyr)
+library(lubridate)
+
+
+## ----Find Id and colorcode-------------------------------------------------------------------------------------
+getwd()
+beh <- read.csv("gpsdata/uva_brood_monitor_hist.csv", header = T)
+colour <- read.csv("gpsdata/uva_transmitter_info.csv", header = T) 
+
+#Match color code with ID
+beh[,7] <- colour[match(beh[,1], colour[,1]), 4]
+colnames(beh)[7]<-"ID"
+
+
+## ----nest data reformating-------------------------------------------------------------------------------------
+
+nest <- read.csv("gpsdata/uva_nest_locs.csv", header = T)
+nest <- nest[,-4]
+
+#convert UTM to latlon coordinates 
+coordinates(nest) <- c("Easting", "Northing")
+proj4string(nest) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat_nest <- spTransform(nest, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs_nest <- data.frame(as(longlat_nest, "SpatialPoints"))
+
+nest <- data.frame(nest)[,-4]
+nest[,c(2,3)]<-longlat_locs_nest
+colnames(nest)[c(2,3)] <- c("lng", "lat") 
+
+nest[,4] <- colour[match(nest[,1], colour[,7]), 4]
+nest[,5] <- colour[match(nest[,1], colour[,7]), 5]
+nest[,4] <- as.character(nest[,4])
+nest[,5] <- as.character(nest[,5])
+nest[,4] <- paste0(nest[,4], "-", nest[,5])
+nest_id <- nest[, c(4,2,3)]
+colnames(nest_id)[1] <- "ID" 
+
+
+## ----test data reformatting------------------------------------------------------------------------------------
+test <- read.csv("cleaned_tracks/1008_clean.csv")
+test.data <- test[,c(2,3,5)]
+test.data[,4] <- rep("1008", nrow(test.data))
+colnames(test.data)[4] <- "ID" 
+test.data <- test.data[,c(4,1:3)]
+
+#creates Id as ID-Year
+test.data[,ncol(test.data)+1] <- substring(test.data[,4],1,4)
+colnames(test.data)[ncol(test.data)]<-"Year"
+test.data[,1] <- paste0(test.data[,1], "-", test.data[,5])
+test.data <- test.data[,-ncol(test.data)]
+
+#convert UTM to latlon coordinates 
+coordinates(test.data) <- c("x", "y")
+proj4string(test.data) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat <- spTransform(test.data, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs <- data.frame(as(longlat, "SpatialPoints"))
+colnames(longlat_locs) <- c("lng", "lat")
+test.data <- data.frame(test.data)[,-5]
+test.data[,c(2,3)] <- longlat_locs
+colnames(test.data)[c(2,3)] <- c("lng", "lat")
+nest_loc<-data.frame()
+#find nest site
+nest_loc<- nest_id[match(test.data[,1], nest_id[,1]), c(2,3)][1,]
+
+
+
+## ----shiny-----------------------------------------------------------------------------------------------------
+
+test.DT <- datatable(test.data, selection = "multiple")
+test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S")
+nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 10, iconAnchorY = 10)
+
+
+my_table <-tibble(
+      Point = c(1:nrow(test.data)),
+      A = 'A',
+      B = 'B',
+      C = 'C',
+      test.data
+    ) %>%
+  mutate(
+    A = sprintf('<input type="radio" name="%s" value="%s"/>', Point, A),
+    B = sprintf('<input type="radio" name="%s" value="%s"/>', Point, B),
+    C = sprintf('<input type="radio" name="%s" value="%s"/>', Point, C),
+  )
+
+
+ui <- dashboardPage(
+    dashboardHeader(title = "Black-Tailed Godwit 1008"),
+    dashboardSidebar(
+      sidebarMenu( 
+        menuItem("Tab1", tabName = "first"),
+        menuItem("Tab2", tabName = "second")),
+      collapsed = T
+      ),
+    dashboardBody(
+      tabItems(
+        tabItem(tabName = "first",
+          #The leaflet map
+          fluidRow(
+              box(leafletOutput("mymap")),
+              
+              box(DTOutput("tab2")),
+              box(
+                title = "Control",
+                  sliderInput("date_range", 
+                              "Choose Date Range:", 
+                              test.data[1,4], 
+                              test.data[nrow(test.data),4], 
+                              value = c(as.POSIXct("2013-05-25 03:00:00"),    
+                                        as.POSIXct("2013-05-25 05:00:00")), 
+                              timezone = "-0400", 
+                              animate = T, 
+                              ticks = T,
+                              timeFormat = "%Y-%m-%d %H:%M:%S", 
+                              step = 7200), 
+                  animationOptions(interval = 10),
+                actionButton("btnProcess2", "Process"), 
+                actionButton("btnCancel2", "Cancel")),
+              box(DTOutput("result2")),
+              
+          )
+        ),
+        tabItem(tabName = "second",
+          #The leaflet map
+          fluidRow(
+              box(DTOutput("tab")),
+              box(actionButton("btnProcess", "Process"), actionButton("btnCancel", "Cancel")),
+              box(DTOutput("result"))
+          )
+        )
+      )
+        
+    )
+)
+server <- function(input, output, session) {
+    dtWithRadioButton <- reactiveValues(dt = my_table, result = NULL)
+    
+    output$mymap <- renderLeaflet({
+        subsetdata <- test.data[which(test.data$date_time <= input$date_range[2] & 
+                                        test.data$date_time >= input$date_range[1]),]
+        
+        leaflet() %>%
+        addCircleMarkers(lng=subsetdata[c(1:nrow(subsetdata)-1),2],
+                         lat=subsetdata[c(1:nrow(subsetdata)-1),3], 
+                          popup=paste ("<b>Date: </b>", subsetdata[,4], "<br>",
+                                       "<b>Index: </b>", c(1:nrow(subsetdata)), "<br>"), 
+                          radius = 10, 
+                          opacity = 0.5, 
+                          color = "green") %>%
+        addProviderTiles(providers$Esri.WorldGrayCanvas, options = providerTileOptions(maxZoom = 30)) %>% 
+        addMarkers(lng = nest_loc[,1], lat = nest_loc[,2], icon = nestIcon)%>% 
+        addCircleMarkers(lng = as.numeric(test.data[1,2]), 
+                         lat = as.numeric(test.data[1,3]), 
+                         color = "darkviolet")%>% 
+        addPolylines(subsetdata$lng,
+                     subsetdata$lat, 
+                     color = "lightgreen") %>%
+        addCircleMarkers(lng = as.numeric(subsetdata[nrow(subsetdata),2]), 
+                         lat = as.numeric(subsetdata[nrow(subsetdata),3]), 
+                         color = "red") 
+    })
+    
+    output$tab <- DT::renderDT(
+      datatable(
+      dtWithRadioButton$dt, escape = FALSE, extensions = c('Scroller', 'Buttons'), 
+      options = list(
+                      dom = 'Bfrtip',
+                      deferRender = TRUE,
+                      scrollY = 400,
+                      scroller = TRUE,
+                      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                    ),
+      callback = JS("table.rows().every(function(i, tab, row) {
+                    var $this = $(this.node());
+                    $this.attr('id', this.data()[0]);
+                    $this.addClass('shiny-input-radiogroup');
+                    });
+                    Shiny.unbindAll(table.table().node());
+                    Shiny.bindAll(table.table().node());"
+                ),
+      rownames = F,
+      ),
+      server = F
+    )
+    
+    observeEvent(input$btnProcess, {
+      dt <- dtWithRadioButton$dt 
+      dt$result <- sapply(as.character(unique(my_table$Point)), function(x) input[[x]])
+      #print(dt$result)
+      dtWithRadioButton$result <- dt
+    })
+    
+    
+    observeEvent(input$btnCancel, {
+      removeModal(session)
+    })
+    
+    output$result <- renderDT({
+      req(dtWithRadioButton$result)
+      datatable(dtWithRadioButton$result[c('Point', 'ID', 'lng', 'lat', 'date_time', 'result')], 
+                escape = FALSE, extensions = c('Scroller', 'Buttons'), 
+      options = list(
+                      dom = 'Bfrtip',
+                      deferRender = TRUE,
+                      scrollY = 400,
+                      scroller = TRUE,
+                      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                    ))
+      
+    })
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    output$tab2 <- DT::renderDT(
+      datatable(
+      dtWithRadioButton$dt, escape = FALSE, extensions = c('Scroller', 'Buttons'), 
+      options = list(
+                      dom = 'Bfrtip',
+                      deferRender = TRUE,
+                      scrollY = 400,
+                      scroller = TRUE,
+                      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                    ),
+      callback = JS("table.rows().every(function(i, tab, row) {
+                    var $this = $(this.node());
+                    $this.attr('id', this.data()[0]);
+                    $this.addClass('shiny-input-radiogroup');
+                    });
+                    Shiny.unbindAll(table.table().node());
+                    Shiny.bindAll(table.table().node());"
+                ),
+      rownames = F,
+      ),
+      server = F
+    )
+    
+    observeEvent(input$btnProcess2, {
+      dt <- dtWithRadioButton$dt 
+      dt$result <- sapply(as.character(unique(my_table$Point)), function(x) input[[x]])
+      #print(dt$result)
+      dtWithRadioButton$result <- dt
+    })
+    
+    
+    observeEvent(input$btnCancel2, {
+      removeModal(session)
+    })
+    
+    output$result2 <- renderDT({
+      req(dtWithRadioButton$result)
+      datatable(dtWithRadioButton$result[c('Point', 'ID', 'lng', 'lat', 'date_time', 'result')], 
+                escape = FALSE, extensions = c('Scroller', 'Buttons'), 
+      options = list(
+                      dom = 'Bfrtip',
+                      deferRender = TRUE,
+                      scrollY = 400,
+                      scroller = TRUE,
+                      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                    ))
+      
+    })
+    
+}
+x<- shinyApp(ui, server)
+x
+
+
