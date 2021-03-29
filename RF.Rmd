@@ -98,7 +98,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 
 test.DT <- datatable(test.data, selection = "multiple")
 test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S")
-nestIcon <- makeIcon(iconUrl = "Images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 15, iconAnchorY = 15)
+nestIcon <- makeIcon(iconUrl = "Images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 10, iconAnchorY = 10)
 ui <- dashboardPage(
     dashboardHeader(title = "Black-Tailed Godwit 1008"),
     dashboardSidebar(
