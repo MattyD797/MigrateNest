@@ -8,6 +8,7 @@ library(shiny)
 library(shinydashboard)
 library(tidyr)
 library(lubridate)
+library(DT)
 
 
 ## ----Find Id and colorcode-------------------------------------------------------------------------------------
@@ -47,9 +48,9 @@ colnames(nest_id)[1] <- "ID"
 
 
 ## ----test data reformatting------------------------------------------------------------------------------------
-test <- read.csv("cleaned_tracks/1008_clean.csv")
+test <- read.csv("cleaned_tracks/1001_clean.csv")
 test.data <- test[,c(2,3,5)]
-test.data[,4] <- rep("1008", nrow(test.data))
+test.data[,4] <- rep("1001", nrow(test.data))
 colnames(test.data)[4] <- "ID" 
 test.data <- test.data[,c(4,1:3)]
 
