@@ -1,0 +1,273 @@
+---
+title: "Untitled"
+author: "Matt Duggan"
+date: "3/22/2021"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, root.dir = "..")
+#library(m2b)
+library(dplyr)
+library(leaflet)
+library(raster)
+library(shiny)
+library(shinydashboard)
+library(tidyr)
+library(lubridate)
+library(crosstalk)
+library(DT)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r Find Id and colorcode}
+beh <- read.csv("gpsdata/uva_brood_monitor_hist.csv", header = T)
+colour <- read.csv("gpsdata/uva_transmitter_info.csv", header = T) 
+
+#Match color code with ID
+beh[,7] <- colour[match(beh[,1], colour[,1]), 4]
+colnames(beh)[7]<-"ID"
+```
+
+```{r nest data reformating}
+
+nest <- read.csv("gpsdata/uva_nest_locs.csv", header = T)
+nest <- nest[,-4]
+
+#convert UTM to latlon coordinates 
+coordinates(nest) <- c("Easting", "Northing")
+proj4string(nest) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat_nest <- spTransform(nest, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs_nest <- data.frame(as(longlat_nest, "SpatialPoints"))
+
+nest <- data.frame(nest)[,-4]
+nest[,c(2,3)]<-longlat_locs_nest
+colnames(nest)[c(2,3)] <- c("lng", "lat") 
+
+nest[,4] <- colour[match(nest[,1], colour[,7]), 4]
+nest[,5] <- colour[match(nest[,1], colour[,7]), 5]
+nest[,4] <- as.character(nest[,4])
+nest[,5] <- as.character(nest[,5])
+nest[,4] <- paste0(nest[,4], "-", nest[,5])
+nest_id <- nest[, c(4,2,3)]
+colnames(nest_id)[1] <- "ID" 
+```
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r test data reformatting}
+test <- read.csv("cleaned_tracks/2042_clean.csv")
+test.data <- test[,c(2,3,5)]
+test.data[,4] <- rep("1008", nrow(test.data))
+colnames(test.data)[4] <- "ID" 
+test.data <- test.data[,c(4,1:3)]
+
+#creates Id as ID-Year
+test.data[,ncol(test.data)+1] <- substring(test.data[,4],1,4)
+colnames(test.data)[ncol(test.data)]<-"Year"
+test.data[,1] <- paste0(test.data[,1], "-", test.data[,5])
+test.data <- test.data[,-ncol(test.data)]
+
+#convert UTM to latlon coordinates 
+coordinates(test.data) <- c("x", "y")
+proj4string(test.data) <- CRS("+proj=utm +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+longlat <- spTransform(test.data, CRSobj="+proj=longlat +zone=31 +datum=WGS84")
+longlat_locs <- data.frame(as(longlat, "SpatialPoints"))
+colnames(longlat_locs) <- c("lng", "lat")
+test.data <- data.frame(test.data)[,-5]
+test.data[,c(2,3)] <- longlat_locs
+colnames(test.data)[c(2,3)] <- c("lng", "lat")
+nest_loc<-data.frame()
+#find nest site
+nest_loc<- nest_id[match(test.data[,1], nest_id[,1]), c(2,3)][1,]
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r shiny}
+
+
+test.DT <- datatable(test.data, selection = "multiple")
+test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S", tz = "CET" )
+nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 10, iconAnchorY = 10)
+test.data$index <- c(1:nrow(test.data))
+
+my_table <-tibble(
+      Point = c(1:nrow(test.data)),
+      A = 'A',
+      B = 'B',
+      C = 'C',
+      test.data
+    ) %>%
+  mutate(
+    A = sprintf('<input type="checkbox" name="%s" value="%s"/>', Point, A),
+    B = sprintf('<input type="checkbox" name="%s" value="%s"/>', Point, B),
+    C = sprintf('<input type="checkbox" name="%s" value="%s"/>', Point, C),
+  )
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = "red"
+)
+
+ui <- dashboardPage(
+    dashboardHeader(title = "Black-Tailed Godwit 1008"),
+    dashboardSidebar(
+      sidebarMenu( 
+        menuItem("Tab1", tabName = "first"),
+        menuItem("Tab2", tabName = "second")),
+      collapsed = T
+      ),
+    dashboardBody(
+      tabItems(
+        tabItem(tabName = "first",
+          #The leaflet map
+          fluidRow(
+              box(leafletOutput("mymap"), 
+                  DTOutput("tab3")),
+              box(DTOutput("tab"),
+                  actionButton("btnProcess", "Process"),
+                  actionButton("btnCancel", "Cancel"),
+                  DTOutput("result"))
+          )
+        ),
+        
+        
+        tabItem(tabName = "second",
+          #The leaflet map
+          fluidRow(
+              box(leafletOutput("mymap2"), DTOutput("tab2")),
+          )
+        )
+        
+      )
+    )
+)
+server <- function(input, output, session) {
+    sd <- SharedData$new(test.data)
+    
+    output$mymap <- renderLeaflet({
+        leaflet(sd) %>% 
+        addTiles() %>% 
+        addAwesomeMarkers(icon = icons,
+                          popup=paste ("<b>Date: </b>", 
+                                       test.data[,4], 
+                                       "<br>",
+                                       "<b>Index: </b>",
+                                       test.data[,5], 
+                                       "<br>"),
+                          label = test.data$index)%>%
+        addProviderTiles(providers$OpenStreetMap, 
+                         options = providerTileOptions(maxZoom = 30))
+
+    })
+    
+    output$tab3 <- DT::renderDataTable(datatable(sd, 
+                                          extensions=c("Scroller", "Buttons"), 
+                                          style="bootstrap", 
+                                          class="compact", 
+                                          width="100%",
+                                          escape = FALSE,
+            options=list(dom = 'Bfrtip', 
+                         deferRender=TRUE, 
+                         scrollY=300, 
+                         scroller=TRUE,
+                         buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                         ),
+                         callback = JS("table.rows().every(function(i, tab, row) {
+                                        var $this = $(this.node());
+                                        $this.attr('id', this.data()[0]);
+                                        $this.addClass('shiny-input-checkboxgroup');
+                                        });
+                                        Shiny.unbindAll(table.table().node());
+                                        Shiny.bindAll(table.table().node());"),
+                         rownames = FALSE),
+            server = FALSE
+    )
+    
+    
+    
+    
+    
+    
+    
+    
+    dtWithRadioButton <- reactiveValues(dt = my_table, result = NULL)
+    
+    output$tab <- DT::renderDT(
+      datatable(
+      dtWithRadioButton$dt, escape = FALSE, extensions = c('Scroller', 'Buttons'), 
+      options = list(
+                      dom = 'Bfrtip',
+                      deferRender = TRUE,
+                      scrollY = 400,
+                      scroller = TRUE,
+                      buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                    ),
+      callback = JS("table.rows().every(function(i, tab, row) {
+                    var $this = $(this.node());
+                    $this.attr('id', this.data()[0]);
+                    $this.addClass('shiny-input-checkboxgroup');
+                    });
+                    Shiny.unbindAll(table.table().node());
+                    Shiny.bindAll(table.table().node());"
+                ),
+      rownames = F,
+      ),
+      server = F
+    )
+    
+    
+    observeEvent(input$btnProcess, {
+      dt <- dtWithRadioButton$dt 
+      dt$result <- sapply(as.character(unique(my_table$Point)), function(x) input[[x]])
+      dtWithRadioButton$result <- dt
+    })
+    
+    observeEvent(input$btnCancel, {
+      removeModal(session)
+    })
+    
+    output$result <- renderDT(
+      #req(dtWithRadioButton$result)
+      server = F,
+      datatable(dtWithRadioButton$result[c('Point', 
+                                           'ID', 
+                                           'lng', 
+                                           'lat', 
+                                           'date_time', 
+                                           'result')], 
+                escape = FALSE, extensions = c('Scroller', 
+                                               'Buttons'), 
+                options = list(
+                                dom = 'Bfrtip',
+                                deferRender = TRUE,
+                                scrollY = 400,
+                                scroller = TRUE,
+                                buttons = c('copy', 
+                                            'csv', 
+                                            'excel', 
+                                            'pdf', 
+                                            'print')
+                    ))
+      
+    )
+    
+    
+}
+x<- shinyApp(ui, server)
+x
+```
