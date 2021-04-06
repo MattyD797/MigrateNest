@@ -67,7 +67,7 @@ You can also embed plots, for example:
 ```{r test data reformatting}
 test <- read.csv("cleaned_tracks/2042_clean.csv")
 test.data <- test[,c(2,3,5)]
-test.data[,4] <- rep("1008", nrow(test.data))
+test.data[,4] <- rep("2042", nrow(test.data))
 colnames(test.data)[4] <- "ID" 
 test.data <- test.data[,c(4,1:3)]
 
@@ -124,7 +124,7 @@ icons <- awesomeIcons(
 )
 
 ui <- dashboardPage(
-    dashboardHeader(title = "Black-Tailed Godwit 1008"),
+    dashboardHeader(title = "Black-Tailed Godwit 2042"),
     dashboardSidebar(
       sidebarMenu( 
         menuItem("Tab1", tabName = "first"),
