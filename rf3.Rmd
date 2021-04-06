@@ -93,16 +93,22 @@ colnames(test.data)[c(2,3)] <- c("lng", "lat")
 nest_loc<-data.frame()
 #find nest site
 nest_loc<- nest_id[match(test.data[,1], nest_id[,1]), c(2,3)][1,]
-
+nest_loc<- cbind(test.data[1,1], nest_loc[1,c(1,2)], test.data[1,c(4)], 2)
+colnames(nest_loc) <- c(colnames(test.data), "icons")
+test.data <- cbind(test.data, 1)
+colnames(test.data)[5] <- c("icons")
+test.data <- rbind(nest_loc, test.data)
+test.data$icons <- as.numeric(test.data$icons)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 ```{r shiny}
 
-
+getwd()
 test.DT <- datatable(test.data, selection = "multiple")
 test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S", tz = "CET" )
-nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 10, iconAnchorY = 10)
+nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 30, iconHeight = 30, iconAnchorX = 15, iconAnchorY = 15)
+
 test.data$index <- c(1:nrow(test.data))
 
 my_table <-tibble(
@@ -116,12 +122,19 @@ my_table <-tibble(
     B = sprintf('<input type="checkbox" name="%s" value="%s"/>', Point, B),
   )
 
-icons <- awesomeIcons(
-  icon = 'ios-close',
+icons <- makeAwesomeIcon(
+  icon = 'ion-egg',
   iconColor = 'black',
   library = 'ion',
-  markerColor = "red"
+  markerColor = "blue"
 )
+icons2 <- makeAwesomeIcon(
+  icon = 'ion-close',
+  iconColor = 'black',
+  markerColor = "red",
+  library = 'ion'
+)
+eggIcons <- awesomeIconList(icons2, icons)
 
 ui <- dashboardPage(
     dashboardHeader(title = "Black-Tailed Godwit 1008"),
@@ -162,7 +175,7 @@ server <- function(input, output, session) {
     output$mymap <- renderLeaflet({
         leaflet(sd) %>% 
         addTiles() %>% 
-        addAwesomeMarkers(icon = icons,
+        addAwesomeMarkers(icon = ~eggIcons[test.data$icons],
                           popup=paste ("<b>Date: </b>", 
                                        test.data[,4], 
                                        "<br>",
