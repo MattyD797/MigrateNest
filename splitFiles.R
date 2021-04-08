@@ -13,7 +13,7 @@ for(file in myfiles){
     print(getwd())
     filename <- paste0(strsplit(files[j], "_")[[1]][1], "-", unique(format(file$date_time, format = "%Y"))[i], ".csv")
     print(paste0(strsplit(list.files("cleaned_tracks")[j], "_")[[1]][1]))
-    write.csv(splitCSV[[i]], filename)
+    write.csv(splitCSV[[i]][-1], filename)
   }
   
   j = j+1
