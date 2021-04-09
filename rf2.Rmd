@@ -65,9 +65,9 @@ colnames(nest_id)[1] <- "ID"
 You can also embed plots, for example:
 
 ```{r test data reformatting}
-test <- read.csv("cleaned_tracks/2042_clean.csv")
+test <- read.csv("cleaned_tracks/1008_clean.csv")
 test.data <- test[,c(2,3,5)]
-test.data[,4] <- rep("2042", nrow(test.data))
+test.data[,4] <- rep("1008", nrow(test.data))
 colnames(test.data)[4] <- "ID" 
 test.data <- test.data[,c(4,1:3)]
 
@@ -173,7 +173,7 @@ server <- function(input, output, session) {
         addProviderTiles(providers$OpenStreetMap, 
                          options = providerTileOptions(maxZoom = 30))
 
-    })
+    })%>% addMarkers(lng = nest_loc[,1], lat = nest_loc[,2], icon = nestIcon)
     
     output$tab3 <- DT::renderDataTable(datatable(sd, 
                                           extensions=c("Scroller", "Buttons"), 

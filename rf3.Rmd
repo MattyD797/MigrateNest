@@ -17,6 +17,7 @@ library(tidyr)
 library(lubridate)
 library(crosstalk)
 library(DT)
+library(stringr)
 ```
 
 ## R Markdown
@@ -58,18 +59,23 @@ nest[,5] <- as.character(nest[,5])
 nest[,4] <- paste0(nest[,4], "-", nest[,5])
 nest_id <- nest[, c(4,2,3)]
 colnames(nest_id)[1] <- "ID" 
+
+head(nest_id)
 ```
 ## Including Plots
 
 You can also embed plots, for example:
 
 ```{r test data reformatting}
+### Enter Bird ID-YYYY here 
+bird_burst <- "1001-2012"
+
 ################ CHANGE FOR DIFFERENT BIRDS #############################
-test <- read.csv("cleaned_tracks/1008_clean.csv")
+test <- read.csv(str_replace_all(string=paste("split_cleaned_tracks_2/",bird_burst,".csv"),pattern=" ", repl=""))
 
 #########################################################################
 test.data <- test[,c(2,3,5)]
-test.data[,4] <- rep("1008", nrow(test.data))
+test.data[,4] <- rep(str_sub(as.character(bird_burst),1,4), nrow(test.data))
 colnames(test.data)[4] <- "ID" 
 test.data <- test.data[,c(4,1:3)]
 
@@ -99,6 +105,8 @@ test.data <- cbind(test.data, 1)
 colnames(test.data)[5] <- c("icons")
 test.data <- rbind(nest_loc, test.data)
 test.data$icons <- as.numeric(test.data$icons)
+test.data <- test.data %>% filter(lat > 51)
+
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
@@ -107,7 +115,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 getwd()
 test.DT <- datatable(test.data, selection = "multiple")
 test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S", tz = "CET" )
-nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 30, iconHeight = 30, iconAnchorX = 15, iconAnchorY = 15)
+nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 30, iconHeight = 100, iconAnchorX = 15, iconAnchorY = 15)
 
 test.data$index <- c(1:nrow(test.data))
 
@@ -130,14 +138,14 @@ icons <- makeAwesomeIcon(
 )
 icons2 <- makeAwesomeIcon(
   icon = 'ion-close',
-  iconColor = 'black',
+  iconColor = "red",
   markerColor = "red",
   library = 'ion'
 )
 eggIcons <- awesomeIconList(icons2, icons)
 
 ui <- dashboardPage(
-    dashboardHeader(title = "Black-Tailed Godwit 1008"),
+    dashboardHeader(title = str_trim(paste("Black-Tailed Godwit", as.character(bird_burst),""))),
     dashboardSidebar(
       sidebarMenu( 
         menuItem("Tab1", tabName = "first"),
@@ -175,6 +183,7 @@ server <- function(input, output, session) {
     output$mymap <- renderLeaflet({
         leaflet(sd) %>% 
         addTiles() %>% 
+        setView(test.data[1,2], test.data[1,3], zoom = 30) %>% 
         addAwesomeMarkers(icon = ~eggIcons[test.data$icons],
                           popup=paste ("<b>Date: </b>", 
                                        test.data[,4], 
