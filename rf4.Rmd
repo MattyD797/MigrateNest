@@ -68,7 +68,7 @@ You can also embed plots, for example:
 
 ```{r test data reformatting}
 ### Enter Bird ID-YYYY here 
-bird_burst <- "2042-2013"
+bird_burst <- "2001-2013"
 
 ################ CHANGE FOR DIFFERENT BIRDS #############################
 test <- read.csv(str_replace_all(string=paste("split_cleaned_tracks_2/",bird_burst,".csv"),pattern=" ", repl=""))
@@ -106,6 +106,11 @@ colnames(test.data)[5] <- c("icons")
 test.data <- rbind(nest_loc, test.data)
 test.data$icons <- as.numeric(test.data$icons)
 test.data <- test.data %>% filter(lat > 51)
+
+##### have only data before hatch date ####
+#test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d H:M:S")
+#test.data <- test.data %>%  filter(date_time < as.POSIXct("2012-05-22"))
+
 #test.data <- test.data[1:3000,] #use if data is too big for the shiny viewer
 
 ```

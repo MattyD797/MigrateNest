@@ -24,10 +24,14 @@ foo(c("randomForest", "m2b", "moveHMM", "momentuHMM", "dplyr"))
 
 
 
-data <- read.csv("./GPS Annotated/Nest Model/train_Haanmeer_gps_nesting.period_v1.csv"); head(data)
+
+
+as.POSIXct(Sys.time(), origin = "1970-01-01")
+
+data <- read.csv("./RF Tracks/1001-2012.csv"); head(data)
 
 str(data)
-data_1 <- data[,c(3,4,5,6,2)]; str(data_1)
+data_1 <- data[,c(5,4,7,6,2)]; str(data_1); head(data_1)
 
 names(data_1)[1] <- "x"
 names(data_1)[2] <- "y"
@@ -39,17 +43,55 @@ str(data_1)
 head(data_1)
 
 data_1$x <- as.numeric(data_1$x)
-data_1$y <- as.numeric(data_1$y)
+data_1$y <- -1*as.numeric(data_1$y)
 data_1$b <- as.character(data_1$b)
 data_1$id <- as.character(data_1$id)
-data_1$t <- as.POSIXct(data_1$t, format = "%Y-%m-%d %H:%M")
-str(data_1); summary(data_1)
-unique(data_1$id)
+data_1$t <- as.POSIXct(data_1$t, format = "%m/%d/%Y %H:%M:%S", origin = "1970-01-01")
+str(data_1); head(data_1)
+#unique(data_1$id)
 
-try <- data_1 %>% filter(id == "1001-2012"| id == "1002-2012"| id == "1008-2013")
+data_1 <- data_1[c(2:nrow(data_1)),]
 
-xytb <- xytb(try, desc="BTGO Birds", winsize=seq(3,15,12), idquant=seq(0,1,.25))
 
+#track_CAGA_005 is the example data set included in the package
+str(track_CAGA_005); str(data_1)
+
+data_1$t <- as.POSIXct(data_1$t, format = "%m/%d/%Y %H:%M:%S", origin = "1970-01-01")
+
+#build the xytb object
+xytb <- xytb(data_1, desc="BTGO Birds",winsize=seq(3,15,2), idquant=seq(0,1,.25))
+ex <- xytb(track_CAGA_005, desc="BTGO Birds",winsize=seq(3,15,2), idquant=seq(0,1,.25))
+
+xytb
+ex
+
+
+#preview, color coded
 plot(xytb)
 
-xytb_rf <- modelRF(xytb,type="actual",ntree=501, mtry = 10)
+#model with random forest
+#watch out that the first t is not missing - if so, you will get a funky error "Error in `+.POSIXt`(as.POSIXct(origin, tz = "GMT", ...), x) :    binary '+' is not defined for "POSIXt" objects"
+xytb_rf <- modelRF(xytb, type = "actual", nob = "-1", ntree = 501, mtry = 10, varkeep = c("v", "dist", "thetarel"))
+
+
+
+resRF(xytb_rf) #to view the out of bag error limit
+resRF(xytb_rf, "importance") # importance of individual variables
+resRF(xytb_rf,"confusion") # view the confusion matrix and the statistics by each class
+
+resB(xytb_rf, nob="-1") #this now presents the behavioral states as predicted, vs the one observed - compared in time
+
+resB(xytb_rf, nob="-1", "space") # and then viewed in space
+
+resB(xytb_rf, nob="-1", "density") # finally density
+
+modRF <- extractRF(xytb_rf)
+plot(modRF)
+
+
+
+
+
+
+#make a prediction for new datasets
+predict(modRF, )
