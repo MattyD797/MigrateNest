@@ -68,7 +68,7 @@ You can also embed plots, for example:
 
 ```{r test data reformatting}
 ### Enter Bird ID-YYYY here 
-bird_burst <- "2001-2013"
+bird_burst <- "2023-2013"
 
 ################ CHANGE FOR DIFFERENT BIRDS #############################
 test <- read.csv(str_replace_all(string=paste("split_cleaned_tracks_2/",bird_burst,".csv"),pattern=" ", repl=""))
@@ -121,6 +121,11 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 getwd()
 test.DT <- datatable(test.data, selection = "multiple")
 test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:%S", tz = "CET" )
+#test.data <- test.data %>%  filter(date_time >= as.POSIXct("2014-04-16 01:00:00", tz="CET"))
+test.data <- test.data %>%  filter(date_time <= as.POSIXct("2014-05-30 01:00:00", tz="CET"))
+
+#test.data <- test.data[complete.cases(test.data),]
+
 nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 30, iconHeight = 100, iconAnchorX = 15, iconAnchorY = 15)
 
 test.data$index <- c(1:nrow(test.data))
