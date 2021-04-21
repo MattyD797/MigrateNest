@@ -68,7 +68,7 @@ You can also embed plots, for example:
 
 ```{r test data reformatting}
 ### Enter Bird ID-YYYY here 
-bird_burst <- "2001-2013"
+bird_burst <- "1002-2012"
 
 ################ CHANGE FOR DIFFERENT BIRDS #############################
 test <- read.csv(str_replace_all(string=paste("split_cleaned_tracks_2/",bird_burst,".csv"),pattern=" ", repl=""))
@@ -185,7 +185,6 @@ ui <- dashboardPage(
 )
 server <- function(input, output, session) {
     sd <- SharedData$new(test.data)
-    
     output$mymap <- renderLeaflet({
         leaflet(sd) %>% 
         addTiles() %>% 
@@ -203,7 +202,7 @@ server <- function(input, output, session) {
                          options = providerTileOptions(maxZoom = 30))
 
     })
-    
+    #
     output$tab3 <- DT::renderDataTable(datatable(sd, 
                                           extensions=c("Scroller", "Buttons"), 
                                           style="bootstrap", 
