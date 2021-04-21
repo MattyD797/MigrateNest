@@ -29,26 +29,20 @@ foo <- function(x){
   }
 }
 
-foo(c("randomForest", "m2b", "moveHMM", "momentuHMM", "dplyr"))
-
-
+foo(c("randomForest", "m2b", "moveHMM", "momentuHMM", "dplyr", "caret","mlbench"))
 
 
 
 as.POSIXct(Sys.time(), origin = "1970-01-01")
 
-f <- read.csv("./RF Tracks/1001-2012.csv"); head(f)
-f1 <- read.csv("./RF Tracks/1002-2012.csv"); head(f1)
-f2 <- read.csv("./RF Tracks/1008-2013.csv"); head(f2)
-f3 <- read.csv("./RF Tracks/2001-2013.csv"); head(f3)
+setwd("C:/Users/14064/Dropbox/BTGO Movmement Study/MigrateNest/")
+files <- list.files("RF tracks")
 
-# f <- f[c(2:nrow(f)),]
-# f1 <- f1[c(2:nrow(f1)),]
-# f2 <- f2[c(2:nrow(f2)),]
-# f3 <- f3[c(2:nrow(f3)),]
+myfiles <- lapply(paste0("./RF tracks/",files), read.csv)
 
-data <- rbind(f,f1,f2,f3)
+data <- rbind(myfiles[[1]],myfiles[[2]],myfiles[[3]],myfiles[[4]],myfiles[[5]],myfiles[[6]],myfiles[[7]],myfiles[[8]],myfiles[[10]],myfiles[[11]],myfiles[[12]],myfiles[[13]])
 
+#,myfiles[[9]]
 
 str(data)
 data_1 <- data[,c(5,4,7,6,2)]; str(data_1); head(data_1)
@@ -91,7 +85,10 @@ plot(xytb)
 
 #model with random forest
 #watch out that the first t is not missing - if so, you will get a funky error "Error in `+.POSIXt`(as.POSIXct(origin, tz = "GMT", ...), x) :    binary '+' is not defined for "POSIXt" objects"
-xytb_rf <- modelRF(xytb, type = "actual", nob = "-1", ntree = 501, mtry = 10, varkeep = c("v", "dist", "thetarel"))
+xytb_rf <- modelRF(xytb, type = "actual", nob = "-1", ntree = 701, mtry = 40)
+#mtry is better as increases!
+
+
 
 
 
@@ -114,4 +111,4 @@ plot(modRF)
 
 
 #make a prediction for new datasets
-predict(modRF,)
+predict(modRF, )
