@@ -1,0 +1,180 @@
+---
+title: "Supervised_HMM"
+author: "Matt Duggan"
+date: "4/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importing raw data
+
+Interpolate the data using tgrw
+
+```{r Reading in of data and interpolate}
+library(PathInterpolatR)
+track <- read.csv("RF Tracks/1002-2012.csv")
+
+#Create the xyt dataframe
+randWalkData <- track[,c(4,5,3)]
+randWalkData[,3] <- as.POSIXct(randWalkData[,3], format = "%m/%d/%Y %H:%M")
+randWalkData[,3] <- as.numeric(randWalkData[,3]) - as.numeric(randWalkData[1,3])
+slice <- vector()
+i <-0
+while(i < randWalkData[length(randWalkData[,3]),3]){
+  slice <- append(slice, i)
+  i<- i+900
+}
+
+latlong <- randWalkData[,c(1:2)]
+#Convert lat long to UTM
+coordinates(latlong) <- c("longitude", "latitude")
+proj4string(latlong) <- CRS("+proj=longlat +zone=31 +datum=WGS84")
+
+#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+utms <- spTransform(latlong, CRSobj="+proj=utm +zone=31 +datum=WGS84")
+utm <- data.frame(as(utms, "SpatialPoints"))
+
+randWalkData[,c(1:2)] <- utm
+colnames(randWalkData)<-c("x", "y", "t")
+
+predxy <- data.frame()
+### Create for loop to interpolate between every point 
+for(x  in 1:(nrow(randWalkData)-1)){
+  interpolate <- vector()
+  for(j in 1:length(slice)){
+    if(randWalkData[x,3]<slice[j] && randWalkData[x+1,3]>slice[j]){
+      interpolate <- append(interpolate,slice[j])
+    }
+  }
+  xyt <- randWalkData[c(x:(x+1)),]
+  if(length(interpolate) > 0){
+    predxy <- rbind(predxy, tgrw(xyt, t.slice = interpolate))
+  }
+}
+
+###Create an even distribution of points every 15min(900sec)
+correlatedTracks <- data.frame()
+for(val in slice){
+  pred <- which(predxy[,3] == val)
+  trueTrack <- which(randWalkData[,3] == val)
+  if(length(pred)>0){
+    correlatedTracks <- rbind(correlatedTracks, predxy[pred,])
+  }
+  else if(length(trueTrack)>0){
+    correlatedTracks <- rbind(correlatedTracks, randWalkData[trueTrack,])
+  }
+  else{
+    print("There is a missing value in t")
+  }
+}
+
+```
+
+
+```{r Vector of Known States}
+
+pred.behavior <- 
+
+for(val in 1:nrow(processedBTGO)){
+  
+}
+```
+
+
+```{r Create HMM}
+library(moveHMM)
+
+processedBTGO <- prepData(correlatedTracks[,c(1:2)], type = "UTM")
+
+library(parallel)
+#running in parallel is faster as it uses different computer cores 
+ncores <- detectCores() - 1
+cl <- makeCluster(getOption("cl.cores", ncores))
+# Export objects needed in parallelised function to cluster
+clusterExport(cl, list("processedBTGO", "fitHMM"))
+
+#Number of tries with different starting values
+niter <- 25
+# Create list of starting values
+allPar0 <- lapply(as.list(1:niter), function(x) {
+  # Step length mean
+  stepMean0 <- runif(2,
+                     min = c(0.001, 1),
+                     max = c(0.1, 10))
+  # Step length standard deviation - when gamma dist (default), the sd is on the same magnitude as the mean
+  stepSD0 <- runif(2,
+                   min = c(0.001, 1),
+                   max = c(0.1, 10))
+  # Turning angle mean
+  angleMean0 <- c(0, 0)
+  # Turning angle concentration
+  angleCon0 <- runif(2,
+                     min = c(0.001, 5),
+                     max = c(1, 10))
+  # Return vectors of starting values
+  stepPar0 <- c(stepMean0, stepSD0)
+  anglePar0 <- c(angleMean0, angleCon0)
+  return(list(step = stepPar0, angle = anglePar0))
+})
+# Fit the niter models in parallel
+allm_parallel <- parLapply(cl = cl, X = allPar0, fun = function(par0) {
+  m <- moveHMM::fitHMM(data = processedBTGO, nbStates = 2, stepPar0 = par0$step,
+              anglePar0 = par0$angle)
+  return(m)
+})
+
+
+# Extract likelihoods of fitted models
+allnllk <- unlist(lapply(allm_parallel, function(m) m$mod$minimum))
+allnllk
+
+
+#Index of best fitting model (smallest negative log-likelihood)
+whichbest <- which.min(allnllk)
+# Best fitting model
+mbest <- allm_parallel[[whichbest]]
+mbest
+plotStates(mbest)
+```
+
+
+```{r Map of Birds}
+mapData <- cbind(processedBTGO[,c(4:5)],viterbi(mbest))
+sputm <- SpatialPoints(mapData[,c(1:2)], proj4string=CRS("+proj=utm +zone=31 +datum=WGS84"))
+mapData[,c(1:2)] <- as.data.frame(spTransform(sputm, CRS("+proj=longlat +datum=WGS84")))
+mapData[,3] <- factor(mapData[,3])
+colnames(mapData)[3]<-"b"
+
+library(ggplot2)
+library("rnaturalearth")
+library("rnaturalearthdata")
+world <- ne_countries(scale = "medium", returnclass = "sf")
+NLD <- readRDS("shapefiles/NLD_adm3.rds")
+ggplot(data = NLD) +
+  geom_sf() +
+  geom_point(data = mapData, aes(x = x, y = y, color = b), size = 1)+
+  coord_sf()+
+  scale_color_manual(values=c("yellow", "red", "green"))+
+  theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "white"), 
+        panel.border = element_rect(fill = NA), legend.position = "none", 
+        axis.title.y = element_text("Latitude"))+
+  xlab("Longitude")+
+  ylab("Latitude")+
+  ggtitle("The Netherlands")
+
+ggplot(data = NLD)+
+  geom_sf()+
+  geom_point(data = mapData, aes(x = x, y = y, color = b), size = 1)+
+  coord_sf(xlim = c(5.39, 5.47), ylim = c(52.9, 53.01), expand = FALSE)+
+  scale_color_manual(values=c("yellow", "red", "green"), name = "Behavior", labels = c("Nesting", "Non-nesting"))+
+  theme(panel.grid.major = element_blank(), 
+        panel.border = element_rect(fill = NA), 
+        axis.text = element_blank(), 
+        axis.title = element_blank(), axis.ticks = element_blank(), 
+        text = element_text(family = "Sans"))+
+  scale_fill_discrete()
+
+```
