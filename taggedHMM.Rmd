@@ -9,77 +9,127 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Importing raw data
-
-Interpolate the data using tgrw
-
-```{r Reading in of data and interpolate}
+```{r Multiple tracks interpolation}
 library(PathInterpolatR)
-track <- read.csv("RF Tracks/1002-2012.csv")
+track1 <- read.csv("RF Tracks/1001-2012.csv")
+track2 <- read.csv("RF Tracks/1002-2012.csv")
+track3 <- read.csv("RF Tracks/1008-2013.csv")
+#track4 <- read.csv("RF Tracks/1009-2013.csv")
+track5 <- read.csv("RF Tracks/2001-2013.csv")
 
-#Create the xyt dataframe
-randWalkData <- track[,c(4,5,3)]
-randWalkData[,3] <- as.POSIXct(randWalkData[,3], format = "%m/%d/%Y %H:%M")
-randWalkData[,3] <- as.numeric(randWalkData[,3]) - as.numeric(randWalkData[1,3])
-slice <- vector()
-i <-0
-while(i < randWalkData[length(randWalkData[,3]),3]){
-  slice <- append(slice, i)
-  i<- i+900
-}
+tracks <- list(track1, track2, track3, track5)
 
-latlong <- randWalkData[,c(1:2)]
-#Convert lat long to UTM
-coordinates(latlong) <- c("longitude", "latitude")
-proj4string(latlong) <- CRS("+proj=longlat +zone=31 +datum=WGS84")
-
-#UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
-utms <- spTransform(latlong, CRSobj="+proj=utm +zone=31 +datum=WGS84")
-utm <- data.frame(as(utms, "SpatialPoints"))
-
-randWalkData[,c(1:2)] <- utm
-colnames(randWalkData)<-c("x", "y", "t")
-
-predxy <- data.frame()
-### Create for loop to interpolate between every point 
-for(x  in 1:(nrow(randWalkData)-1)){
-  interpolate <- vector()
-  for(j in 1:length(slice)){
-    if(randWalkData[x,3]<slice[j] && randWalkData[x+1,3]>slice[j]){
-      interpolate <- append(interpolate,slice[j])
+randomWalk <- function(y){
+    #Create the xyt dataframe
+  randWalkData <- y[,c(which(colnames(y)=="latitude"),which(colnames(y)=="longitude"),which(colnames(y)=="date_time"))]
+  randWalkData[,3] <- as.POSIXct(randWalkData[,3], format = "%m/%d/%Y %H:%M", origin = randWalkData[1,3])
+  randWalkData[,3] <- as.numeric(randWalkData[,3], origin = randWalkData[1,3]) - as.numeric(randWalkData[1,3], origin = randWalkData[1,3])
+  slice <- vector()
+  i <-0
+  while(i < randWalkData[length(randWalkData[,3]),3]){
+    slice <- append(slice, i)
+    i<- i+900
+  }
+  
+  latlong <- randWalkData[,c(1:2)]
+  #Convert lat long to UTM
+  coordinates(latlong) <- c("longitude", "latitude")
+  proj4string(latlong) <- CRS("+proj=longlat +zone=31 +datum=WGS84")
+  
+  #UTM is in meters, but is based on zones - the zone of the region in Netherlands is 31N or 32N (western Netherlands)
+  utms <- spTransform(latlong, CRSobj="+proj=utm +zone=31 +datum=WGS84")
+  utm <- data.frame(as(utms, "SpatialPoints"))
+  
+  randWalkData[,c(1:2)] <- utm
+  colnames(randWalkData)<-c("x", "y", "t")
+  
+  predxy <- data.frame()
+  ### Create for loop to interpolate between every point 
+  for(x  in 1:(nrow(randWalkData)-1)){
+    interpolate <- vector()
+    for(j in 1:length(slice)){
+      if(randWalkData[x,3]<slice[j] && randWalkData[x+1,3]>slice[j]){
+        interpolate <- append(interpolate,slice[j])
+      }
+    }
+    xyt <- randWalkData[c(x:(x+1)),]
+    if(length(interpolate) > 0){
+      predxy <- rbind(predxy, tgrw(xyt, t.slice = interpolate))
     }
   }
-  xyt <- randWalkData[c(x:(x+1)),]
-  if(length(interpolate) > 0){
-    predxy <- rbind(predxy, tgrw(xyt, t.slice = interpolate))
+  
+  ###Create an even distribution of points every 15min(900sec)
+  correlatedTracks <- data.frame()
+  for(val in slice){
+    pred <- which(predxy[,3] == val)
+    trueTrack <- which(randWalkData[,3] == val)
+    if(length(pred)>0){
+      correlatedTracks <- rbind(correlatedTracks, predxy[pred,])
+    }
+    else if(length(trueTrack)>0){
+      correlatedTracks <- rbind(correlatedTracks, randWalkData[trueTrack,])
+    }
+    else{
+      print("There is a missing value in t")
+    }
   }
+  
+  
+  pred.behavior <- y[,c(which(colnames(y)=="date_time"),which(colnames(y)=="b"))]
+
+  pred.behavior[,1] <- as.POSIXct(pred.behavior[,1], format = "%m/%d/%Y %H:%M")
+  pred.behavior[,1] <- as.numeric(pred.behavior[,1]) - as.numeric(pred.behavior[1,1])
+  
+  #testData <- corTrack[which(correlatedTracks[,4]==y),]
+  
+  for(val in 1:nrow(correlatedTracks)){
+    minimum <- min(abs(pred.behavior[,1]- correlatedTracks[val,3]))
+    minimum.at <- which.min(abs(pred.behavior[,1]- correlatedTracks[val,3]))
+    if(minimum < 300 && pred.behavior[minimum.at,2] == 1){
+      correlatedTracks[val,4] <- pred.behavior[minimum.at,2]
+    }
+    else if(minimum < 300 && pred.behavior[minimum.at,2] != 1){
+      correlatedTracks[val,4] <- 2
+    }
+    else{
+      correlatedTracks[val,4] <- NA
+    }
+  }
+  
+  return(cbind(correlatedTracks, rep(y[1,2], nrow(correlatedTracks))))
 }
 
-###Create an even distribution of points every 15min(900sec)
-correlatedTracks <- data.frame()
-for(val in slice){
-  pred <- which(predxy[,3] == val)
-  trueTrack <- which(randWalkData[,3] == val)
-  if(length(pred)>0){
-    correlatedTracks <- rbind(correlatedTracks, predxy[pred,])
-  }
-  else if(length(trueTrack)>0){
-    correlatedTracks <- rbind(correlatedTracks, randWalkData[trueTrack,])
-  }
-  else{
-    print("There is a missing value in t")
-  }
+corTrack <- data.frame()
+for(track in tracks){
+  corTrack <- rbind(corTrack, randomWalk(track))
 }
+
+colnames(corTrack)[c(4:5)] <- c("pred.beh", "ID")
 
 ```
 
 
 ```{r Vector of Known States}
 
-pred.behavior <- 
+pred.behavior <- track2[,c(3,6)]
 
-for(val in 1:nrow(processedBTGO)){
-  
+pred.behavior[,1] <- as.POSIXct(pred.behavior[,1], format = "%m/%d/%Y %H:%M")
+pred.behavior[,1] <- as.numeric(pred.behavior[,1]) - as.numeric(pred.behavior[1,1])
+
+testData <- corTrack[which(corTrack[,4]=="1002-2012"),]
+
+for(val in 1:nrow(testData)){
+  minimum <- min(abs(pred.behavior[,1]- testData[val,3]))
+  minimum.at <- which.min(abs(pred.behavior[,1]- testData[val,3]))
+  if(minimum < 300 && pred.behavior[minimum.at,2] == 1){
+    testData[val,5] <- pred.behavior[minimum.at,2]
+  }
+  else if(minimum < 300 && pred.behavior[minimum.at,2] != 1){
+    testData[val,5] <- 2
+  }
+  else{
+    testData[val,5] <- NA
+  }
 }
 ```
 
@@ -87,14 +137,14 @@ for(val in 1:nrow(processedBTGO)){
 ```{r Create HMM}
 library(moveHMM)
 
-processedBTGO <- prepData(correlatedTracks[,c(1:2)], type = "UTM")
+processedBTGO <- prepData(corTrack, type = "UTM", coordNames = c("x", "y"))
 
 library(parallel)
 #running in parallel is faster as it uses different computer cores 
 ncores <- detectCores() - 1
 cl <- makeCluster(getOption("cl.cores", ncores))
 # Export objects needed in parallelised function to cluster
-clusterExport(cl, list("processedBTGO", "fitHMM"))
+clusterExport(cl, list("processedBTGO", "fitHMM", "corTrack"))
 
 #Number of tries with different starting values
 niter <- 25
@@ -102,12 +152,12 @@ niter <- 25
 allPar0 <- lapply(as.list(1:niter), function(x) {
   # Step length mean
   stepMean0 <- runif(2,
-                     min = c(0.001, 1),
-                     max = c(0.1, 10))
+                     min = c(0.00001, 100),
+                     max = c(10, 300))
   # Step length standard deviation - when gamma dist (default), the sd is on the same magnitude as the mean
   stepSD0 <- runif(2,
-                   min = c(0.001, 1),
-                   max = c(0.1, 10))
+                   min = c(0.001, 100),
+                   max = c(10, 5000))
   # Turning angle mean
   angleMean0 <- c(0, 0)
   # Turning angle concentration
@@ -122,7 +172,7 @@ allPar0 <- lapply(as.list(1:niter), function(x) {
 # Fit the niter models in parallel
 allm_parallel <- parLapply(cl = cl, X = allPar0, fun = function(par0) {
   m <- moveHMM::fitHMM(data = processedBTGO, nbStates = 2, stepPar0 = par0$step,
-              anglePar0 = par0$angle)
+              anglePar0 = par0$angle, knownStates = corTrack[,4])
   return(m)
 })
 
@@ -142,11 +192,38 @@ plotStates(mbest)
 
 
 ```{r Map of Birds}
-mapData <- cbind(processedBTGO[,c(4:5)],viterbi(mbest))
+behaviors <- viterbi(mbest)
+
+
+mapData <- cbind(processedBTGO[,c(4:5, 1)],behaviors)
 sputm <- SpatialPoints(mapData[,c(1:2)], proj4string=CRS("+proj=utm +zone=31 +datum=WGS84"))
 mapData[,c(1:2)] <- as.data.frame(spTransform(sputm, CRS("+proj=longlat +datum=WGS84")))
+mapData[,4] <- factor(mapData[,4])
 mapData[,3] <- factor(mapData[,3])
-colnames(mapData)[3]<-"b"
+colnames(mapData)[4]<-"b"
+
+testMapData <- mapData[which(mapData[,3]=="1002-2012"),]
+
+findNest <- rle(as.numeric(testMapData$b))
+
+diffIndex <- findNest$lengths
+
+for(i in 2:length(findNest$lengths)){
+  findNest$lengths[i] <- findNest$lengths[i] + findNest$lengths[i-1]
+}
+
+endIndex <- findNest$lengths
+startIndex <- endIndex - findNest$lengths[1]
+
+#For removing nesting behavior that happened in less than 10 ping (arbitrary value)
+
+#for(i in 1:length(diffIndex)){
+  #if(diffIndex[i] < 10){
+    #testMapData$b[c(startIndex[i]:endIndex[i])] <- 2
+  #}
+#}
+
+
 
 library(ggplot2)
 library("rnaturalearth")
@@ -155,9 +232,9 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 NLD <- readRDS("shapefiles/NLD_adm3.rds")
 ggplot(data = NLD) +
   geom_sf() +
-  geom_point(data = mapData, aes(x = x, y = y, color = b), size = 1)+
+  geom_point(data = testMapData, aes(x = x, y = y, color = b), size = 1)+
   coord_sf()+
-  scale_color_manual(values=c("yellow", "red", "green"))+
+  scale_color_manual(values=c("blue", "red"))+
   theme(panel.grid.major = element_blank(), panel.background = element_rect(fill = "white"), 
         panel.border = element_rect(fill = NA), legend.position = "none", 
         axis.title.y = element_text("Latitude"))+
@@ -167,9 +244,9 @@ ggplot(data = NLD) +
 
 ggplot(data = NLD)+
   geom_sf()+
-  geom_point(data = mapData, aes(x = x, y = y, color = b), size = 1)+
+  geom_point(data = testMapData, aes(x = x, y = y, color = b), size = 1)+
   coord_sf(xlim = c(5.39, 5.47), ylim = c(52.9, 53.01), expand = FALSE)+
-  scale_color_manual(values=c("yellow", "red", "green"), name = "Behavior", labels = c("Nesting", "Non-nesting"))+
+  scale_color_manual(values=c("blue", "red"), name = "Behavior", labels = c("Nesting", "Non-nesting"))+
   theme(panel.grid.major = element_blank(), 
         panel.border = element_rect(fill = NA), 
         axis.text = element_blank(), 
