@@ -114,4 +114,4 @@ plot(modRF)
 
 
 #make a prediction for new datasets
-predict(modRF, )
+predict(modRF,)

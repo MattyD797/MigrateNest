@@ -103,6 +103,9 @@ test.data$date_time <- as.POSIXct(test.data$date_time, format = "%Y-%m-%d %H:%M:
 nestIcon <- makeIcon(iconUrl = "images/nest.png", iconWidth = 20, iconHeight = 20, iconAnchorX = 10, iconAnchorY = 10)
 test.data$index <- c(1:nrow(test.data))
 
+test2 <- cbind(test.data, nest_loc)
+colnames(test2) <- c("ID", "lng", "lat", "date", "index", "nest_lng", "nest_lat")
+
 my_table <-tibble(
       Point = c(1:nrow(test.data)),
       A = 'A',
@@ -157,21 +160,36 @@ ui <- dashboardPage(
     )
 )
 server <- function(input, output, session) {
-    sd <- SharedData$new(test.data)
+    sd <- SharedData$new(test2)
     
     output$mymap <- renderLeaflet({
         leaflet(sd) %>% 
         addTiles() %>% 
         addAwesomeMarkers(icon = icons,
                           popup=paste ("<b>Date: </b>", 
-                                       test.data[,4], 
+                                       test2[,4], 
                                        "<br>",
                                        "<b>Index: </b>",
-                                       test.data[,5], 
+                                       test2[,5], 
                                        "<br>"),
-                          label = test.data$index)%>%
-        addProviderTiles(providers$OpenStreetMap, 
-                         options = providerTileOptions(maxZoom = 30))
+                          label = test2$index)%>%
+        addProviderTiles("CartoDB.Positron", 
+                         group = 'Default', 
+                         options = providerTileOptions(maxZoom = 30)) %>%
+        addProviderTiles("Esri.WorldImagery", 
+                         group = 'Aerial', 
+                         options = providerTileOptions(maxZoom = 30)) %>%
+        addProviderTiles("OpenStreetMap.Mapnik", 
+                         group = 'Street', 
+                         options = providerTileOptions(maxZoom = 30)) %>%
+        addProviderTiles("OpenTopoMap", 
+                         group = 'Terrain', 
+                         options = providerTileOptions(maxZoom = 30)) %>%
+        addLayersControl(
+        baseGroups = c("Default", "Aerial", "Street", "Terrain"),
+        options = layersControlOptions(collapsed = TRUE)
+      )
+        
 
     })%>% addMarkers(lng = nest_loc[,1], lat = nest_loc[,2], icon = nestIcon)
     
