@@ -1,2 +1,0 @@
-"","result.rowid","result.val_1","result.val_2","result.Yes","result.No","result.Maybe","result.result","dt.rowid","dt.val_1","dt.val_2","dt.Yes","dt.No","dt.Maybe"
-"1","a",8.9,0.66,"<input type=""radio"" name=""a"" value=""Yes""/>","<input type=""radio"" name=""a"" value=""No""/>","<input type=""radio"" name=""a"" value=""Maybe""/>",
