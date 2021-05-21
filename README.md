@@ -4,5 +4,5 @@
 - [ ] Perfom Prevelance check in RF model
 - [ ] Create Matrices for Bayesian Model
 - [ ] Second Stage of HMM model
-- [ ] Clean Argos data
+- [X] Clean Argos data
 - [ ] 
