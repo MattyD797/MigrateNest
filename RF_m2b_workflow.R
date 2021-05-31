@@ -228,6 +228,8 @@ gps.fixes <- predictions %>% group_by(id) %>% count(Julian)
 gps.fixes.df <- as.data.frame(gps.fixes)
 head(gps.fixes.df)
 
+
+#what I am trying to do here is fill in the missing values for days not in the sample. We will need both matrices (GPS fixes, and Fate) to have the same dimensions
 range <- seq(1,365,by=1)
 range_full <- expand.grid(range, gps.fixes.df$id)
 
