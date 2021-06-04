@@ -38,16 +38,11 @@ options(max.print = 99)
 
 as.POSIXct(Sys.time(), origin = "1970-01-01")
 
-setwd("C:/Users/14064/Dropbox/BTGO Movmement Study/MigrateNest/")
-files <- list.files("RF tracks")
-
-myfiles <- lapply(paste0("./RF tracks/",files[1:25]), read.csv)
+files <- list.files("Models/RF/Predicted_Tracks")
+myfiles <- lapply(paste0("Models/RF/Predicted_Tracks/",files[1:25]), read.csv)
 
 ####train RF model####
-data <- rbind(myfiles[[6]], myfiles[[7]], myfiles[[8]], myfiles[[9]], myfiles[[10]], myfiles[[11]], myfiles[[12]], myfiles[[13]], myfiles[[14]], myfiles[[15]], myfiles[[16]], myfiles[[17]], myfiles[[18]], myfiles[[19]], myfiles[[20]], myfiles[[21]], myfiles[[22]], myfiles[[23]], myfiles[[24]], myfiles[[25]])
-
-#,myfiles[[9]]
-
+data <- do.call('rbind',  myfiles[6:length(myfiles)])
 str(data)
 data_1 <- data[,c(4,3,6,5,1)]; str(data_1); head(data_1)
 
@@ -71,7 +66,7 @@ unique(data_1$id)
 data_1 <- data_1[complete.cases(data_1),]
 
 #call test data, using similar to above
-test.data <- rbind(myfiles[[1]],myfiles[[2]],myfiles[[3]],myfiles[[4]],myfiles[[5]])
+test.data <- do.call('rbind',  myfiles[1:5])
 
 #process as before, convert to xytb object
 str(test.data)
@@ -114,8 +109,6 @@ data_1$t <- as.POSIXct(data_1$t, format = "%m/%d/%Y %H:%M:%S", origin = "1970-01
 xytb <- xytb(data_1, desc="BTGO Birds",winsize=seq(3,15,2), idquant=seq(0,1,.25),move=c(5,10,15))
 #ex <- xytb(track_CAGA_005, desc="BTGO Birds",winsize=seq(3,15,2), idquant=seq(0,1,.25))
 xytb@befdxyt
-#xytb@xyt
-#ex
 
 #xytb<-xytb(track_CAGA_005,desc="example track",winsize=seq(3,15,2),idquant=seq(0,1,.25),move=c(5,10,15))
 #xytb@befdxyt
@@ -149,45 +142,6 @@ class(predictions)
 
 # to extract the model and make predictions without the need to merge birds together
 
-
-
-
-
-####export and test#####
-## --- To DO LIST --- ##
-
-# need to export and predict from trained model (above) on new data for which we have annotations. Testing the model.
-
-#plot(chick_modRF)
-
-#call test data, using similar to above
-test.data <- rbind(myfiles[[1]],myfiles[[2]],myfiles[[3]],myfiles[[4]],myfiles[[5]])
-
-#process as before, convert to xytb object
-str(test.data)
-test.data_1 <- test.data[,c(4,3,6,5,1)]; str(test.data_1); head(test.data_1)
-
-names(test.data_1)[1] <- "x"
-names(test.data_1)[2] <- "y"
-names(test.data_1)[3] <- "t"
-names(test.data_1)[4] <- "b"
-names(test.data_1)[5] <- "id"
-
-str(test.data_1)
-head(test.data_1);tail(test.data_1)
-
-test.data_1$x <- as.numeric(test.data_1$x)
-test.data_1$y <- -1*as.numeric(test.data_1$y)
-test.data_1$b <- as.character(test.data_1$b)
-test.data_1$id <- as.character(test.data_1$id)
-test.data_1$t <- as.POSIXct(test.data_1$t, format = "%m/%d/%Y %H:%M", origin = "1970-01-01") #for some reason, the t column lost the seconds
-
-str(test.data_1); head(test.data_1); tail(test.data_1)
-unique(test.data_1$id)
-
-test.data_1 <- test.data_1[complete.cases(test.data_1),]
-
-
 xytb.test <- xytb(test.data_1, desc="BTGO Birds",winsize=seq(3,15,2), idquant=seq(0,1,.25),move=c(5,10,15))
 
 xytb.test@befdxyt
@@ -210,7 +164,7 @@ predictions_exported <- predict(chick_modRF, newdata = xytb.test.pred)
 str(predictions)
 
 #extract julian day
-Julian <- as.numeric(format(predictions$t, "%j"))
+Julian <- as.numeric(format(predictions$t, "%j"))[20]
 predictions <- cbind(predictions, Julian)
 
 unique(predictions$id)
@@ -219,11 +173,37 @@ unique(predictions$id)
 #chick tending - between 80 and 244
 
 #fate
+nest.beh <- predictions %>% group_by(id, Julian) %>% count(b)
+nest.beh <- nest.beh[nest.beh$b==1,]
 
+
+nest.beh.final <- matrix(nrow = length(unique(nest.beh$id)), ncol = 365)
+rownames(nest.beh.final) <- c(unique(nest.beh$id))
+
+for(i in 1:length(nest.beh$id)){
+  nest.beh.final[match(nest.beh[i,1], pull(unique(nest.beh[,1]))),
+                  as.numeric(nest.beh[i, 2])] <- as.numeric(nest.beh[i,4])
+}
+#fate matrix
+nest.beh.final[is.na(nest.beh.final)] <- 0
 
 
 #GPS fixes
+gps.fixes.final <- matrix(nrow = length(unique(gps.fixes$id)), ncol = 365)
+rownames(gps.fixes.final) <- c(unique(gps.fixes$id))
+
 gps.fixes <- predictions %>% group_by(id) %>% count(Julian)
+
+for(i in 1:length(gps.fixes$id)){
+  gps.fixes.final[match(gps.fixes[i,1], pull(unique(gps.fixes[,1]))),
+                  as.numeric(gps.fixes[i, 2])] <- as.numeric(gps.fixes[i,3])
+}
+
+#GPS_fix_matrix
+gps.fixes.final[is.na(gps.fixes.final)] <- 0
+
+
+
 
 gps.fixes.df <- as.data.frame(gps.fixes)
 head(gps.fixes.df)
